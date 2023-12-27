@@ -10,3 +10,5 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 project(WebServer LANGUAGES CXX)
 
+add_subdirectory(wmymain)
+add_subdirectory(webserver)
