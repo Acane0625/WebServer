@@ -109,4 +109,4 @@ void HeapTimer::adjust(int id, int timeOut) {
   siftdown(m_ref[id], m_heap.size());
 }
 
-}; // namespace webserver
+} // namespace webserver
