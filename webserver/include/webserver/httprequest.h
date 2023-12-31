@@ -30,32 +30,32 @@ public:
     CLOSED_CONNECTION,
   };
 
-  HttpRequest() { Init(); }
+  HttpRequest() { init(); }
   ~HttpRequest() = default;
 
-  void Init();
+  void init();
   bool parse(Buffer &buff);
 
   std::string path() const;
   std::string &path();
   std::string method() const;
   std::string version() const;
-  std::string GetPost(const std::string &key) const;
-  std::string GetPost(const char *key) const;
+  std::string getpost(const std::string &key) const;
+  std::string getpost(const char *key) const;
 
-  bool IsKeepAlive() const;
+  bool is_keepalive() const;
 
 
 private:
-  bool ParseRequestLine_(const std::string &line);
-  void ParseHeader_(const std::string &line);
-  void ParseBody_(const std::string &line);
+  bool parse_requestline(const std::string &line);
+  void parse_header(const std::string &line);
+  void parse_body(const std::string &line);
 
-  void ParsePath_();
-  void ParsePost_();
-  void ParseFromUrlencoded_();
+  void parse_path();
+  void parse_post();
+  void parse_fromurlencoded();
 
-  static bool UserVerify(const std::string &name, const std::string &pwd, bool isLogin);
+  static bool userverify(const std::string &name, const std::string &pwd, bool isLogin);
 
   PARSE_STATE m_state;
   std::string m_method, m_path, m_version, m_body;
@@ -64,7 +64,7 @@ private:
 
   static const std::unordered_set<std::string> DEFAULT_HTML;
   static const std::unordered_map<std::string, int> DEFAULT_HTML_TAG;
-  static int ConverHex(char ch);
+  static int converhex(char ch);
 };
 
 } // namespace webserver
