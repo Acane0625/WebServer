@@ -61,9 +61,85 @@ void WebServer::start() {
   }
 }
 
-bool WebServer::init_socket() {}
+bool WebServer::init_socket() {
+  int ret;
+  sockaddr_in addr;
+  if(m_port > 65535 || m_port < 1024) {
+    //LOG_ERROR("Port:%d error!",  port_);
+    return false;
+  }
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  addr.sin_port = htons(m_port);
+  linger optLinger = {0};
+  if(m_openlinger) {
+    optLinger.l_linger = 1;
+    optLinger.l_onoff = 1;
+  }
+  
+  m_listenfd = socket(AF_INET, SOCK_STREAM, 0);
+  if(m_listenfd < 0) {
+    //LOG_ERROR("Create socket error!", port_);
+    return false;
+  }
+  ret = setsockopt(m_listenfd, SOL_SOCKET, SO_LINGER, &optLinger, sizeof(optLinger));
+  if(ret < 0) {
+    close(m_listenfd);
+    //LOG_ERROR("Init linger error!", port_);
+    return false;
+  }
+  int optval = 1;
+  ret = setsockopt(m_listenfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(int));
+  if(ret == -1) {
+    //LOG_ERROR("set socket setsockopt error !");
+    close(m_listenfd);
+    return false;
+  }
+  ret = bind(m_listenfd, (sockaddr *)&addr, sizeof(addr));
+  if(ret < 0) {
+    //LOG_ERROR("Bind Port:%d error!", port_);
+    close(m_listenfd);
+    return false;
+  }
+  ret = listen(m_listenfd, 6);
+  if(ret < 0) {
+    //LOG_ERROR("Listen port:%d error!", port_);
+    close(m_listenfd);
+    return false;
+  }
+  ret = m_epoller->addfd(m_listenfd, m_listen_event | EPOLLIN);
+  if(!ret) {
+    //LOG_ERROR("Add listen error!");
+    close(m_listenfd);
+    return false;
+  }
+  setfd_nonblock(m_listenfd);
+  //LOG_INFO("Server port:%d", port_);
+  return true;
+}
 
-void WebServer::init_eventmode(int trigMode) {}
+void WebServer::init_eventmode(int trigMode) {
+  m_listenfd = EPOLLRDHUP;
+  m_conn_event = EPOLLONESHOT | EPOLLRDHUP;
+  switch (trigMode) {
+    case 0:
+      break;
+    case 1:
+      m_conn_event |= EPOLLET;
+      break;
+    case 2:
+      m_listen_event |= EPOLLET;
+    case 3:
+      m_listen_event |= EPOLLET;
+      m_conn_event |= EPOLLET;
+      break;
+    default:
+      m_listen_event |= EPOLLET;
+      m_conn_event |= EPOLLET;
+      break;
+  }
+  HttpConn::isET = (m_conn_event & EPOLLET);
+}
 
 void WebServer::add_client(int fd, sockaddr_in addr) {
   assert(fd > 0);
@@ -88,23 +164,19 @@ void WebServer::deal_listen() {
       return;
     }
     add_client(fd, addr);
-  } while(m_listen_event & EPOLLET)
+  } while(m_listen_event & EPOLLET);
 }
 
 void WebServer::deal_write(HttpConn *client) {
   assert(client);
   extent_time(client);
-  m_threadpool->submit([&] (HttpConn *client) {
-    this->on_write(client);
-  }, client);
+  m_threadpool->submit(std::bind(&WebServer::on_write, this, std::placeholders::_1), client);
 }
 
 void WebServer::deal_read(HttpConn *client) {
   assert(client);
   extent_time(client);
-  m_threadpool->submit([&] (HttpConn *client) {
-    this->on_read(client);
-  }, client);
+  m_threadpool->submit(std::bind(&WebServer::on_read, this, std::placeholders::_1), client);
 }
 
 void WebServer::send_error(int fd, const char *info) {
@@ -130,12 +202,47 @@ void WebServer::close_conn(HttpConn *client) {
   client->Close();
 }
 
-void WebServer::on_read(HttpConn *client) {}
+void WebServer::on_read(HttpConn *client) {
+  assert(client);
+  int ret = -1;
+  int readErrno = 0;
+  ret = client->read(&readErrno);
+  if(ret <= 0 && readErrno != EAGAIN) {
+    close_conn(client);
+    return;    
+  }
+  on_process(client);
+}
 
-void WebServer::on_write(HttpConn *client) {}
+void WebServer::on_write(HttpConn *client) {
+  assert(client);
+  int ret = -1;
+  int writeErrno = 0;
+  ret = client->write(&writeErrno);
+  if(!client->towritebytes()) {
+    if(client->is_keepalive()) {
+      on_process(client);
+      return;
+    }
+  } else if(ret < 0) {
+    if(writeErrno == EAGAIN) {
+      m_epoller->modfd(client->getfd(), m_conn_event | EPOLLOUT);
+      return;
+    }
+  }
+}
 
-void WebServer::on_process(HttpConn *client) {}
+void WebServer::on_process(HttpConn *client) {
+  if(client->process()) {
+    m_epoller->modfd(client->getfd(), m_conn_event | EPOLLOUT);
+  } else {
+    m_epoller->modfd(client->getfd(), m_conn_event | EPOLLIN);
+  }
+}
 
-int WebServer::setfd_nonblock(int fd) {}
-
+int WebServer::setfd_nonblock(int fd) {
+  assert(fd > 0);
+  return fcntl(fd, F_SETFL, fcntl(fd, F_GETFD, 0) | O_NONBLOCK);
+}
+  
 } // namespace webserver
