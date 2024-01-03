@@ -4,7 +4,7 @@ namespace webserver {
 
 bool Epoller::addfd(int fd, uint32_t events) {
   if(fd < 0) return false;
-  epoll_event ev{};
+  epoll_event ev = {0};
   ev.data.fd = fd;
   ev.events = events;
   return epoll_ctl(m_epollfd, EPOLL_CTL_ADD, fd, &ev) == 0;

@@ -10,7 +10,7 @@ const char *Buffer::beginptr() const {
   return &*m_buffer.begin();
 }
 
-void Buffer::makespace(std::size_t len) {
+void Buffer::makespace(size_t len) {
   if(writeable_bytes() + prependable_bytes() < len) {
     m_buffer.resize(m_writepos + len + 1);
   } else {
@@ -100,8 +100,11 @@ ssize_t Buffer::readfd(int fd, int *Errno) {
   char temp[65535];
   iovec iov[2];
   const size_t writeable = writeable_bytes();
-  iov[0] = {beginptr() + writeable, writeable};
-  iov[1] = {temp, sizeof(temp)};
+  iov[0].iov_base = beginptr() + m_writepos;
+  iov[0].iov_len = writeable;
+  iov[1].iov_base = temp;
+  iov[1].iov_len = sizeof(temp);
+
   const ssize_t len = readv(fd, iov, 2);
   if(len < 0) *Errno = errno;
   else if(static_cast<size_t>(len) <= writeable) m_writepos += len;

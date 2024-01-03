@@ -43,14 +43,14 @@ ssize_t HttpConn::write(int *saveErrno) {
     }
     if(m_iov[0].iov_len + m_iov[1].iov_len == 0) break;
     else if(static_cast<size_t>(len) > m_iov[0].iov_len) {
-      m_iov[1].iov_base = (u_int8_t*) m_iov[1].iov_base + (len - m_iov[0].iov_len);
+      m_iov[1].iov_base = (uint8_t*) m_iov[1].iov_base + (len - m_iov[0].iov_len);
       m_iov[1].iov_len -= (len - m_iov[0].iov_len);
       if(m_iov[0].iov_len) {
         m_writebuff.retrieveall();
         m_iov[0].iov_len = 0;
       }
     } else {
-      m_iov[0].iov_base = (u_int8_t*)m_iov[0].iov_base + len;
+      m_iov[0].iov_base = (uint8_t*)m_iov[0].iov_base + len;
       m_iov[0].iov_len -= len;
       m_writebuff.retrieve(len);
     }
@@ -91,10 +91,12 @@ bool HttpConn::process() {
     //LOG_DEBUG("%s", request_.path().c_str());
     m_response.init(srcDir, m_request.path(), m_request.is_keepalive(), 200);
   } else {
+    puts(m_request.path().c_str());
     m_response.init(srcDir, m_request.path(), false, 400);
   }
   m_response.makeresponse(m_writebuff);
   m_iov[0].iov_base = const_cast<char*>(m_writebuff.peek());
+  m_iov[0].iov_len = m_writebuff.readable_bytes();
   m_iovcnt = 1;
 
   if(m_response.filelen() > 0 && m_response.file()) {

@@ -1,5 +1,5 @@
 #include <webserver/httprequest.h>
-
+#include <iostream>
 namespace webserver {
 
 const std::unordered_set<std::string> HttpRequest::DEFAULT_HTML{

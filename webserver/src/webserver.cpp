@@ -1,5 +1,5 @@
 #include <webserver/webserver.h>
-
+#include <iostream>
 namespace webserver {
 
 WebServer::WebServer(int port, int trigMode, int timeoutMS, bool OptLinger,
@@ -8,6 +8,7 @@ WebServer::WebServer(int port, int trigMode, int timeoutMS, bool OptLinger,
                      bool openLog, int logLevel, int logQueSize) : 
   m_port(port), m_openlinger(OptLinger), m_timeoutMS(timeoutMS), m_isClose(false),
   m_timer(new HeapTimer()), m_threadpool(new ThreadPool(threadNum)), m_epoller(new Epoller()) {
+    m_threadpool->init();
     m_srcdir = getcwd(nullptr, 256);
     assert(m_srcdir);
     strncat(m_srcdir, "/resources/", 16);
@@ -47,11 +48,11 @@ void WebServer::start() {
         close_conn(&m_users[fd]);
       }
       else if(events & EPOLLIN) {
-        assert(m_users.count(fd));
+        assert(m_users.count(fd) > 0);
         deal_read(&m_users[fd]);
       }
       else if(events & EPOLLOUT) {
-        assert(m_users.count(fd));
+        assert(m_users.count(fd) > 0);
         deal_write(&m_users[fd]);
       } 
       else {
@@ -73,8 +74,8 @@ bool WebServer::init_socket() {
   addr.sin_port = htons(m_port);
   linger optLinger = {0};
   if(m_openlinger) {
-    optLinger.l_linger = 1;
     optLinger.l_onoff = 1;
+    optLinger.l_linger = 1;
   }
   
   m_listenfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -89,7 +90,7 @@ bool WebServer::init_socket() {
     return false;
   }
   int optval = 1;
-  ret = setsockopt(m_listenfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(int));
+  ret = setsockopt(m_listenfd, SOL_SOCKET, SO_REUSEADDR, (const void*)&optval, sizeof(int));
   if(ret == -1) {
     //LOG_ERROR("set socket setsockopt error !");
     close(m_listenfd);
@@ -119,7 +120,7 @@ bool WebServer::init_socket() {
 }
 
 void WebServer::init_eventmode(int trigMode) {
-  m_listenfd = EPOLLRDHUP;
+  m_listen_event = EPOLLRDHUP;
   m_conn_event = EPOLLONESHOT | EPOLLRDHUP;
   switch (trigMode) {
     case 0:
@@ -230,6 +231,7 @@ void WebServer::on_write(HttpConn *client) {
       return;
     }
   }
+  close_conn(client);
 }
 
 void WebServer::on_process(HttpConn *client) {
